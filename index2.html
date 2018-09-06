@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no">
+    <title>Change attribute used for a renderer</title>
+    <link rel="stylesheet" href="https://js.arcgis.com/3.17/dijit/themes/tundra/tundra.css">
+    <link rel="stylesheet" href="https://js.arcgis.com/3.17/esri/css/esri.css">
+    <style>
+      html, body { height: 100%; width: 100%; margin: 0; padding: 0; }
+      h3 { margin: 0 0 5px 0; border-bottom: 1px solid #444; text-align: center; }
+      .shadow {
+        -moz-box-shadow: 0 0 5px #888;
+        -webkit-box-shadow: 0 0 5px #888;
+        box-shadow: 0 0 5px #888;
+      }
+      #map{ margin: 0; padding: 0; }
+      #feedback {
+        background: #fff;
+        color: #444;
+        font-family: arial;
+        left: 30px;
+        margin: 5px;
+        padding: 10px;
+        position: absolute;
+        top: 30px;
+        width: 300px;
+        z-index: 40;
+      }
+      #note { font-size: 80%; font-weight: 700; padding: 0 0 10px 0; }
+      #loading { visibility: hidden; }
+      #legendDiv { top: -35px; }
+      #printButton {
+	    left: 210px;
+	    position: relative;
+	    bottom: 10px;
+	    width: 80px;
+	}
+    </style>
+
+    <script src="https://js.arcgis.com/3.17/"></script>
+    <script src="js/districts.js"></script>
+  <script src="js/depths.js"></script>
+  <script>
+    require([
+      "dojo/_base/array",
+      "dojo/dom",
+      "dojo/dom-style",
+      "dojo/number",
+      "dojo/on",
+      "dojo/parser",
+      "esri/basemaps",
+      "esri/Color",
+      "esri/dijit/Basemap",
+      "esri/dijit/BasemapGallery",
+      "esri/dijit/PopupTemplate",
+      "esri/dijit/Print",
+      "esri/dijit/Legend",
+      "esri/dijit/util/busyIndicator",
+      "esri/geometry/Point",
+      "esri/InfoTemplate",
+      "esri/layers/FeatureLayer",
+      "esri/map",
+      "esri/plugins/FeatureLayerStatistics",
+      "esri/request",
+      "esri/renderers/smartMapping",
+      "esri/renderers/UniqueValueRenderer",
+      "esri/symbols/SimpleFillSymbol",
+      "esri/symbols/SimpleLineSymbol",
+      "esri/tasks/AlgorithmicColorRamp",
+      "esri/tasks/query",
+      "esri/tasks/QueryTask",
+      "dijit/registry",
+      "dojo/data/ItemFileReadStore",
+      "dijit/layout/BorderContainer",
+      "dijit/layout/ContentPane",
+      "dijit/TitlePane",
+      "dijit/form/FilteringSelect",
+      "dojo/domReady!"
+    ], function (
+      arrayUtils, dom, domStyle, number, on,
+      parser, esriBasemaps, Color, Basemap, BasemapGallery, PopupTemplate, Print, Legend, busyIndicator, Point,
+      InfoTemplate, FeatureLayer, Map, FeatureLayerStatistics, esriRequest, smartMapping, UniqueValueRenderer,
+      SimpleFillSymbol, SimpleLineSymbol, AlgorithmicColorRamp, Query, QueryTask, registry, ItemFileReadStore
+    ){
+      parser.parse();
+      var app = {district: districts[0], depth: depthQueries[0], fieldsAlias: {}, popupTemplate: {}};
+      var basemap = "streets";
+      var theme = "high-to-low";
+      //var fieldName= "SPATIALVER";Shape_Length,Shape_Area,hzdept_r,hzdepb_r,frag3to10_r,sieveno4_r,sieveno40_r,sieveno10_r,sieveno200_r,sandtotal_r,sandvc_r,sandco_r,aashind_r
+      var fieldName = "frag3to10_r";
+
+      var perUrl = "http://irpsrvgis37.utep.edu/arcgis/rest/services/Texas/Perimeters_joined/MapServer/0";
+      var url = "http://irpsrvgis37.utep.edu/arcgis/rest/services/Texas/Texas_complete/MapServer/0";
+      var mapOptions = {basemap: basemap, center: [districts[5].center[1], districts[5].center[0]], zoom: 6, level: 6, slider: false, navigationMode: 'css-transforms', force3DTransforms: true};
+      var map = new Map("esri-map-container", mapOptions);
+
+      //add the basemap gallery, in this case we'll display maps from ArcGIS.com including bing maps
+      var basemapGallery = new BasemapGallery({
+        showArcGISBasemaps: true,
+        map: map
+      }, "basemapGallery");
+      basemapGallery.startup();
+
+      var printer = new Print({
+        map: map,
+        url: "http://irpsrvgis37.utep.edu/arcgis/rest/services/Utilities/PrintingTools/GPServer/Export%20Web%20Map%20Task"
+      }, dom.byId("printButton"));
+      printer.startup();
+
+
+		// get field info
+		var countyFields = esriRequest({
+		  url: url,
+		  content: {
+		    f: "json"
+		  },
+		  callbackParamName: "callback"
+		});
+		countyFields.then(function(resp) {
+		  var fieldNames, fieldStore;
+		  var suggested = {'rupresblkmst':"Moist Block Strength", 'rupresblkdry':"Dry Block Strength", 'rupresblkcem':"Submerged Block Strength", 'rupresplate':"Dry Plate Strength", 'frag3to10_r':"Percent Boulder", 'sieveno4_r':"Percent Passing No. 4 Sieve", 'sieveno10_r':"Percent Passing No. 10 Sieve", 'sieveno40_r':"Percent Passing No. 40 Sieve", 'sieveno200_r':"Percent Passing No. 200 Sieve", 'sandtotal_r':"% Total Sand in Fine Fraction (P#10)", 'sandvc_r':"% V. Coarse Sand in Fine Fraction (P#10)", 'sandco_r':"% Coarse Sand in Fine Fraction (P#10)", 'sandmed_r':"% Med Sand in Fine Fraction (P#10)", 'sandfine_r':"% Fine Sand in Fine Fraction (P#10)", 'sandvf_r':"% V. Fine Sand in Fine Fraction (P#10)", 'silttotal_r':"% Total Silt in Fine Fraction (P#10)", 'siltco_r':"% Coarse Silt in Fine Fraction (P#10)", 'siltfine_r':"% Fine Silt in Fine Fraction (P#10)", 'claytotal_r':"% Total Clay  in Fine Fraction (P#10)", 'claysizedcarb_r':"% Carbonate Clay  in Fine Fraction (P#10)", 'om_r':"% Organic Content in Fine Fraction (P#10)", 'partdensity':"Specific Gravity", 'ksat_r':"Saturated Hydraulic Conductivity", 'll_r':"Liquid Limit", 'pi_r':"Plasticity Index", 'kffact':"Erodibility Factor", 'caco3_r':"% Calcium Carbonate Content in Fine Fraction (P#10)", 'gypsum_r':"% Gypsum Content in Fraction Passing 0.75 in. Sieve", 'ph1to1h2o_r':"pH 1:1 Soil-water ratio", 'ph01mcacl2_r':"pH using 0.01 CaCl2 in 1:2 soil solution ratio", 'excavdifcl':"Excavation Difficulty Index", 'corcon':"Corrosivity of Concrete", 'corsteel':"Corrosivity of Steel"};
+		  fieldNames = { identifier: "value", label: "name", items: [] };
+		  arrayUtils.forEach(resp.fields.slice(8, 63), function(f) { // add some field names to the FS
+		  	//if theres a better name for the property use it instead
+		  	if(suggested.hasOwnProperty(f.name)){
+		  		f.alias = suggested[f.name];
+		  	}
+		    fieldNames.items.push({ "name": f.alias, "value": f.name, "type": f.type });
+		    app.fieldsAlias[f.name] = f.alias;
+		  });
+
+		  fieldStore = new ItemFileReadStore({ data: fieldNames });
+		  registry.byId("fieldNames").set("store", fieldStore);
+		  registry.byId("fieldNames").set("value", "frag3to10_r"); // set a value
+		}, function(err) {
+		  console.log("failed to get field names: ", err);
+		});
+
+      app.popupTemplate = new PopupTemplate({
+        title: "Property: " + fieldName
+      });
+      var perimeter = new FeatureLayer (perUrl, {outFields: ["*"]});
+      var featureLayer = new FeatureLayer(url, {
+	      	opacity: 0.7,
+	      	id: "soil",
+	        outFields: ["*"],
+	        infoTemplate: app.popupTemplate});
+	    featureLayer.setDefinitionExpression("AREASYMBOL LIKE 'TX0943'");
+	    map.addLayer(featureLayer);
+
+      map.addLayer(perimeter);
+      featureLayer.on("update-end", function() {
+	      domStyle.set("loading", "visibility", "hidden");
+	      if(registry.byId("fieldNames").item.type[0] != "esriFieldTypeString"){
+	      	document.getElementsByClassName('esriLegendLayer')[0].style.display = 'none';
+	      }
+	    });
+	    featureLayer.on("update-start", function() {
+	      domStyle.set("loading", "visibility", "visible");
+	    });
+
+        /*
+     dom.byId("depths").onchange = function(){
+      	var e = document.getElementById("depths");
+      	if(e.selectedIndex < 4){
+      		var val = e.options[e.selectedIndex].value;
+	      	app.depth = depthQueries[val];
+	      	updateDefinitionExpression();
+      	}
+      	else{
+      		featureLayer.setDefinitionExpression(app.district.sql);
+      	}
+      };
+      */
+      document.getElementById("run").onclick = getData;
+      function updateDefinitionExpression(){
+      	domStyle.set("loading", "visibility", "visible");
+      	featureLayer.setDefinitionExpression(app.district.sql + " AND " + app.depth);
+      }
+      /*
+		dom.byId("District").onchange = function(){
+			var e = document.getElementById("District");
+	      	var val = e.options[e.selectedIndex].value;
+	      	app.district = districts[val];
+	      	map.centerAndZoom(new Point(app.district.center[1], app.district.center[0]), 8);
+	      	updateDefinitionExpression();
+		};
+		*/
+
+	  	//registry.byId("fieldNames").on("change", getData);
+	    registry.byId("fieldNames").set("value", "frag3to10_r"); // triggers getData()
+	    var legend = "";
+	    function getData(){
+	    	console.log("Get data started");
+
+	    	//districts portion
+	    	var e = document.getElementById("District");
+	      	var val = e.options[e.selectedIndex].value;
+	      	app.district = districts[val];
+	      	map.centerAndZoom(new Point(app.district.center[1], app.district.center[0]), 8);
+	      	//updateDefinitionExpression();
+	      	//depths portion
+	      	var e = document.getElementById("depths");
+	      	if(e.selectedIndex < 4){
+	      		var val = e.options[e.selectedIndex].value;
+		      	app.depth = depthQueries[val];
+		      	//updateDefinitionExpression();
+	      	}
+	      	else{
+	      		featureLayer.setDefinitionExpression(app.district.sql);
+	      	}
+	      	updateDefinitionExpression();
+	      	//data portion
+	    	domStyle.set("loading", "visibility", "visible");
+	    	var fieldName = registry.byId("fieldNames").get("value") || "frag3to10_r";
+	    	featureLayer.infoTemplate.info.title = app.fieldsAlias[fieldName] + ": {" + fieldName + "}";
+	    	if(registry.byId("fieldNames").item.type[0] == "esriFieldTypeString"){//check if it is numeric
+	    		//case where not numeric, use uniquerender
+	    		//get the unique values
+				queryTask = new QueryTask(url);
+				query = new Query();
+				query.returnGeometry = false;
+				query.outFields = [fieldName];
+				query.returnDistinctValues = true;
+				query.where = fieldName + "<> ''";
+				queryTask.execute(query,getUniqueValues);
+	    		//create symbol for renderer
+	    		var defaultSymbol = new SimpleFillSymbol().setStyle(SimpleFillSymbol.STYLE_NULL);
+          		defaultSymbol.outline.setStyle(SimpleLineSymbol.STYLE_NULL);
+	    		//create renderer
+	    		/*
+          		var renderer = new UniqueValueRenderer(defaultSymbol, fieldName);
+          		renderer.addValue("Very plastic", new SimpleFillSymbol().setColor(new Color([255, 0, 0, 0.5])).setOutline(new SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_NULL, new Color([0,0,0]), 0)));
+          		renderer.addValue("Moderately plastic", new SimpleFillSymbol().setColor(new Color([255, 100, 0, 0.5])).setOutline(new SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_NULL, new Color([0,0,0]), 0)));
+          		renderer.addValue("Slightly plastic", new SimpleFillSymbol().setColor(new Color([255, 255, 0, 0.5])).setOutline(new SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_NULL, new Color([0,0,0]), 0)));
+          		renderer.addValue("Non plastic", new SimpleFillSymbol().setColor(new Color([0, 255, 0, 0.5])).setOutline(new SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_NULL, new Color([0,0,0]), 0)));
+          		featureLayer.setRenderer(renderer);
+          		featureLayer.redraw();
+          		*/
+          		if(typeof legend == "string"){
+		        	legend = new Legend({
+		            map : map,
+		            layerInfos : [ {
+		              layer : map.getLayer("soil"),
+		              hideLayers: [0],
+		              title : "Values"
+		            } ]
+		          }, dom.byId("legendDiv"));
+		          legend.defaultSymbol = false;
+		          legend.startup();
+		        }
+		        else{
+		        	legend.refresh([{layer:map.getLayer("soil")}]);
+		        }
+	    	}
+	    	else{//case where numeric, use smartmapping
+	    		smartMapping.createColorRenderer({
+		        layer: featureLayer,
+		        field: fieldName,
+		        showOthers: false,
+		        basemap: basemap,
+		        theme: theme
+		        }).then(function (colorRenderer){
+		        //console.log("create color renderer is generated", colorRenderer);
+
+		        if (!featureLayer.visible) {
+		          featureLayer.show();
+		        }
+		        featureLayer.setRenderer(colorRenderer.renderer);
+		        featureLayer.redraw();
+		        if(typeof legend == "string"){
+		        	legend = new Legend({
+		            map : map,
+		            layerInfos : [ {
+		              layer : map.getLayer("soil"),
+		              hideLayers: [0,1],
+		              defaultSymbol: false,
+		              title : " "
+		            } ]
+		          }, dom.byId("legendDiv"));
+		          legend.defaultSymbol = false;
+		          legend.startup();
+		        }
+		        else{
+		        	legend.refresh([{layer:map.getLayer("soil")}]);
+		        }
+		        setTimeout(function() {
+		        	document.getElementsByClassName('esriLegendLayer')[0].style.display = 'none';
+		        }, 3000);
+		        domStyle.set("loading", "visibility", "hidden");
+		      });
+	    	}
+	    }
+	    function getUniqueValues(results){
+	    	var zone;
+	        var renderer = new UniqueValueRenderer(null, results.fields[0].name);
+	        var red, green;
+
+	        //Loop through the QueryTask results and populate an array with the unique values
+	        var features = results.features;
+	        var ammount = features.length - 1;
+	        dojo.forEach (features, function(feature, i) {
+	          zone = feature.attributes;
+	          red = Math.floor((255 * i) / ammount);
+	          green = Math.floor((255 * (ammount - i)) / ammount);
+	          renderer.addValue(zone[Object.keys(zone)[0]], new SimpleFillSymbol().setColor(new Color([red, green, 0, 1])).setOutline(new SimpleLineSymbol(esri.symbol.SimpleLineSymbol.STYLE_NULL, new Color([0,0,0]), 0)));
+	        });
+	        featureLayer.setRenderer(renderer);
+      		featureLayer.redraw();
+      		domStyle.set("loading", "visibility", "hidden");
+      		legend.refresh([{layer:map.getLayer("soil")}]);
+	    }
+	    function getFeaturesDescription(){
+	    	var str = "";
+	    	for(var k in app.fieldsAlias){
+	    		if(app.fieldsAlias.hasOwnProperty(k)){
+	    			str += app.fieldsAlias[k] + ": {" + k + "}<br/>";
+	    		}
+	    	}
+	    	console.log(str);
+	    }
+
+
+    });
+  </script>
+  </head>
+
+  <body class="tundra">
+    <div data-dojo-type="dijit/layout/BorderContainer"
+         data-dojo-props="design:'headline',gutters:false"
+         style="width: 100%; height: 100%; margin: 0;">
+      <div id="esri-map-container"
+           data-dojo-type="dijit/layout/ContentPane"
+           data-dojo-props="region:'center'">
+
+           <div style="position:absolute; right:20px; top:10px; z-Index:999;">
+	        <div data-dojo-type="dijit/TitlePane"
+	             data-dojo-props="title:'Switch Basemap', closable:false, open:false">
+	          <div data-dojo-type="dijit/layout/ContentPane" style="width:380px; height:280px; overflow:auto;">
+	            <div id="basemapGallery"></div>
+	          </div>
+	        </div>
+	      </div>
+
+        <div id="feedback" class="shadow">
+          <div id="info">
+            <div id="note">
+              Select an attribute to view the locations in the map.
+            </div>
+            <div>
+            	<label for="District">District: </label>
+		        <select id="District">
+		          <option value="0" selected>Abilene</option>
+		          <option value="1">Amarillo</option>
+		          <option value="2">Atlanta</option>
+		          <option value="3">Austin</option>
+		          <option value="4">Beaumont</option>
+		          <option value="5">Brownwood</option>
+		          <option value="6">Bryan</option>
+		          <option value="7">Childress</option>
+		          <option value="8">Corpus Christi</option>
+		          <option value="9">Dallas</option>
+		          <option value="10">El Paso</option>
+		          <option value="11">Fort Worth</option>
+		          <option value="12">Houston</option>
+		          <option value="13">Laredo</option>
+		          <option value="14">Lubbock</option>
+		          <option value="15">Lufkin</option>
+		          <option value="16">Odessa</option>
+		          <option value="17">Paris</option>
+		          <option value="18">Pharr</option>
+		          <option value="19">San Angelo</option>
+		          <option value="20">San Antonio</option>
+		          <option value="21">Tyler</option>
+		          <option value="22">Waco</option>
+		          <option value="23">Wichita Falls</option>
+		          <option value="24">Yoakum</option>
+		        </select><br/>
+		        <label for="fieldNames">Parameter: </label>
+	            <select id="fieldNames" name="baseSym"
+	                    data-dojo-type="dijit/form/FilteringSelect"
+	                    data-dojo-props="style:'width:200px;'">
+	            </select><br/>
+		        <label for="depths">Depth level: </label>
+		        <select id="depths">
+		          <option value="0" selected>0-1</option>
+		          <option value="1">1-2</option>
+		          <option value="2">2-3</option>
+		          <option value="3">3+</option>
+		          <option value="4">All</option>
+		        </select><br/>
+		        <button type="button" id="run">Run</button>
+            
+      </div>
+
+            <img id="loading" src="https://dl.dropboxusercontent.com/u/2142726/esrijs-samples/loading_black.gif" />
+
+            <div id="legendDiv" style="margin-top: 12px; z-index: 99999"></div>
+            <div data-dojo-type="dijit/layout/ContentPane">
+	            <div id="printButton"></div>
+	        </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>

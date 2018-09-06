@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Simple icons</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+  	<div id="map"></div>
+    <script>
+
+      // This example adds a marker to indicate the position of Bondi Beach in Sydney,
+      // Australia.
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 4,
+          center: {lat: 31., lng: -105.}
+        });
+        var colors = ["blue", "brown", "darkgreen", "green", "orange", "paleblue", "pink", "purple", "red", "yellow"];
+        var letters = ["A", "B", "C", "D", "E","F","G","H", "I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+        var markers = [{'coords':[31.730277, -106.227591], 'color': 3}, {'coords':[35.524910, -101.888498], 'color': 3}, {'coords':[26.292309, -98.522712], 'color': 3}, {'coords':[27.838116, -97.501795], 'color': 3}, {'coords':[29.606647, -98.583521], 'color': 3}, {'coords':[30.809843, -97.668949], 'color': 3}, {'coords':[31.115671, -97.452027], 'color': 3}, {'coords':[33.310098, -96.559639], 'color': 3}, {'coords':[33.243846, -97.791945], 'color': 3}, {'coords':[31.861091, -101.592272], 'color': 3}, {'coords':[31.695392, -99.013568], 'color': 3}, {'coords':[34.433620, -92.857608], 'color': 3}, {'coords':[33.777749, -94.182715], 'color': 3}, {'coords':[34.115039, -95.377172], 'color': 3}, {'coords':[34.121163, -95.348870], 'color': 3}, {'coords':[34.768674, -98.395727], 'color': 3}, {'coords':[33.018856, -98.416897], 'color': 3}, {'coords':[33.220116, -98.138738], 'color': 3}, {'coords':[32.763779, -97.349626], 'color': 9}, {'coords':[32.674748, -97.104080], 'color': 9}, {'coords':[31.937701, -106.544111], 'color': 8}, {'coords':[32.828409, -97.373572], 'color': 8}];
+        var i = 0;
+	      for( i = 0; i < markers.length; i++ ) {
+	        var position = new google.maps.LatLng(markers[i].coords[0], markers[i].coords[1]);
+	        var image = "img/markers/" + colors[markers[i].color] + "_Marker" + letters[i%letters.length] + ".png";
+	        marker = new google.maps.Marker({
+	            position: position,
+	            map: map,
+	            icon: image
+	        });
+	       }
+      }
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key= AIzaSyCY0B3_Fr1vRpgJDdbvNmrVyXmoOOtiq64 &callback=initMap">
+    </script>
+  </body>
+</html>
